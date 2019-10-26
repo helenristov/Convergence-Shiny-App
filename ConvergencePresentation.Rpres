@@ -1,0 +1,158 @@
+Convergence Analysis
+========================================================
+author: Helen Ristov, Jing Song, and Ryan Ranson
+date:   `r format(Sys.Date(), '%B %d, %Y')`
+width:  1920
+height: 1080
+
+```{r preparation, echo=FALSE}
+library(ggplot2)
+library(gridExtra)
+library(plyr)
+library(xtable)
+
+load("PreprocessedConvergence.RData")
+
+pooled.sd <- function(sd, obs) {
+  stopifnot(length(sd) == length(obs))
+  sqrt(sum((obs - 1) * (sd ^ 2)) / (sum(obs) - length(sd)))
+}
+
+res.summary <- ddply(res, .(perf.period, threshold), function(x) data.frame( 
+                     obs           = sum(x$obs), 
+                     disjoint.obs  = sum(x$disjoint.obs),
+                     converged.obs = sum(x$converged.obs),
+                     disjoint.pct  = sum(x$disjoint.obs) / sum(x$obs),
+                     converged.pct = sum(x$converged.obs) / sum(x$disjoint.obs),
+                     avg.reversion = weighted.mean(x$avg.reversion, x$disjoint.obs, na.rm = TRUE),
+                     avg.shortfall = weighted.mean(x$avg.shortfall, x$disjoint.obs, na.rm = TRUE)))
+
+res.summary$reward.risk <- res.summary$avg.reversion / res.summary$avg.shortfall
+#res.summary <- res.summary[res.summary$disjoint.obs >= 5000,]
+
+df.summary <- data.frame(Total.Obs = sum(df.stats$obs),
+                         Mean      = weighted.mean(df.stats$mean, df.stats$obs),
+                         Std.Dev   = pooled.sd(df.stats$sd, df.stats$obs),
+                         Skewness  = weighted.mean(df.stats$skew, df.stats$obs),
+                         Kurtosis  = weighted.mean(df.stats$kurt, df.stats$obs),
+                         Min       = min(df.stats$min),
+                         Max       = max(df.stats$max))
+```
+
+Introduction
+========================================================
+
+The goal of this analysis is to identify points in double fly price series where there is a high probability of mean reversion and also to determine an appropriate expected holding period for trades.
+
+Definitions
+- Limit: assumed long-term mean of the double fly price series
+- Epsilon: distance above and below the limit which defines the convergence zone
+- Threshold: distance above and below the limit for which we will consider an observation disjoint
+- Performance Period: time period we will look at each disjoint instance to test for convergence
+
+A disjoint observation is said to converge if it reaches the convergence zone at any point during the performance period. The reversion metric is the change in the direction of the limit of the series until either the series converges or reaches the end of the performance period.
+
+We will look at 30 second bars of 60 CL double fly price series from CLF0.G0.H0.J0 to CLZ4.F5.G5.H5. The limit parameter is assumed to be 0 and epsilon is set at 0.01.
+
+Data Summary
+========================================================
+
+```{r, echo=FALSE, fig.width=25, fig.height=13, results='asis'}
+print(xtable(df.summary, digits = c(0, 0, 4, 4, 4, 4, 4, 4)), 
+      type = "html", 
+      include.rownames = FALSE,
+      format.args = list(big.mark = ","))
+
+ggplot(data = res, aes(x = Series, y = mean, ymin = min, ymax = max)) + 
+  geom_crossbar(fill = "lightblue", color = "black") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+  ylab("Range")
+```
+
+Convergence Metrics
+========================================================
+left: 30%
+
+```{r, echo=FALSE}
+min.idx.1  <- which.min(res.summary$converged.pct[res.summary$perf.period == 1])
+min.idx.30 <- which.min(res.summary$converged.pct[res.summary$perf.period == 30])
+```
+
+- Convergence increases with performance period
+- High convergence rates for high thresholds are largley due to small sample size (there are only `r res.summary$disjoint.obs[res.summary$perf.period == 30 & res.summary$threshold == 0.25]` disjoint observations for performance period = 30 and threshold = 0.25)
+- Min for performance period = 1 occurs at threshold = `r res.summary$threshold[min.idx.1]`
+- Min for performance period = 30 occurs at threshold = `r res.summary$threshold[min.idx.30]`
+
+***
+
+```{r, echo=FALSE, fig.width=15, fig.height=12}
+qplot(threshold, converged.pct, data = res.summary,
+      group = factor(perf.period),
+      color = factor(perf.period),
+      geom  = "line",
+      xlab  = "Threshold ",
+      ylab  = "Avg Convergence Rate") +
+  labs(color = "Performance Period") 
+```
+
+Shortfall Metrics
+========================================================
+left: 30%
+
+```{r, echo=FALSE}
+min.idx.1  <- which.min(res.summary$avg.shortfall[res.summary$perf.period == 1])
+min.idx.30 <- which.min(res.summary$avg.shortfall[res.summary$perf.period == 30])
+```
+
+- Avg Shortfall indicates how far, on average, the series moves above/below the threshold value during the performance period
+- Provides an indication of how far we can expect the trade to move against us if it is put on at the threshold
+- Min for performance period = 1 occurs at threshold = `r res.summary$threshold[min.idx.1]`
+- Min for performance period = 30 occurs at threshold = `r res.summary$threshold[min.idx.30]`
+
+***
+
+```{r, echo=FALSE, fig.width=15, fig.height=12}
+qplot(threshold, avg.shortfall, data = res.summary,
+      group = factor(perf.period),
+      color = factor(perf.period),
+      geom  = "line",
+      xlab  = "Threshold ",
+      ylab  = "Avg Shortfall")+
+  labs(color = "Performance Period")
+```
+
+Risk-Adjusted Reversion Metrics
+========================================================
+left: 30%
+
+- Reversion / Avg Shortfall provides a risk-adjusted measure of how far the series is expected to revert during the performance period
+- For long performance periods, the marginal improvement in this metric appears to begin falling at a threshold of 0.2
+
+***
+
+```{r, echo=FALSE, fig.width=15, fig.height=12}
+qplot(threshold, reward.risk, data = res.summary,
+      group = factor(perf.period),
+      color = factor(perf.period),
+      geom  = "line",
+      xlab  = "Threshold ",
+      ylab  = "Reward to Risk") +
+  labs(color = "Performance Period") 
+```
+
+Conclusion
+========================================================
+
+```{r, echo=FALSE}
+pct.disjoint.14  <- res.summary$disjoint.pct[res.summary$perf.period == 1 & res.summary$threshold == 0.14]
+pct.disjoint.20  <- res.summary$disjoint.pct[res.summary$perf.period == 1 & res.summary$threshold == 0.2]
+```
+
+Recommendations
+- Threshold values in the range of 0.14 - 0.2 appear to give the best results
+    - Threshold of 0.14 results in `r round(100 * pct.disjoint.14, 2)`% of observations being disjoint
+    - Threshold of 0.2 results in `r round(100 * pct.disjoint.20, 2)`% of observations being disjoint
+
+Next Steps
+- Determining optimal position scaling as double fly becomes more disjointed
+- Taking into account time until expiration

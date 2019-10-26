@@ -1,0 +1,66 @@
+---
+title: "Convergence Metrics"
+output: html_document
+date:   "`r format(Sys.Date(), '%B %d, %Y')`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache = TRUE, warning = FALSE, fig.height = 6, fig.width = 9)
+knitr::read_chunk('ConvergenceMetrics_Example.R')
+```
+
+The goal of this analysis is to determine if a time series tends to converge to a limit value when the series is outside of preset bands surrounding the limit value. Several of the parameters we will need to choose are:
+
+- Performance Period: how far into the future we will look at each disjoint instance to test for convergence.
+- Limit: the assumed long-term mean of the series.
+- Threshold: the distance above and below the limit for which we will consider an observation disjoint.
+- Epsilon: the distance above and below the limit which define the convergence zone (Epsilon << Threshold).
+
+We can say that a series is "well-behaved" if it tends to revert towards the limit value in a reasonable amount of time. Ideally the series will exhibit high convergence rates in as short of a performance period as possible.
+
+We start by looking at the CLF3.G3.H3.J3 double butterfly series and will set the limit parameter to 0 and the epsilon parameter to 0.01. This means that if the series is above or below the threshold value and returns to the range of [-0.01, 0.01] at some point in the performance period, we will count it as having converged. 
+
+Plotting the weighted mid-point of the series gives us an idea of how it behaves:
+
+```{r preparation, cache=TRUE, message=FALSE}
+```
+
+The mean of the series is `r round(mean(CLF3.G3.H3.J3), 4)` and the standard deviation is `r round(sd(CLF3.G3.H3.J3), 4)`. The chart shows that the series tends to be mean reverting with relatively constant volatility. 
+
+To get a better understanding of where we should set the performance period and threshold, we can plot the convergence rates for a range of possibilities for each. The data we are using is in 30 second bars and we will only check for disjoint instances every 10 bars (5 minutes) to reduce the number of correlated observations.
+
+```{r calculations, cache=TRUE, message=FALSE}
+```
+
+The chart of the convergence rate for each performance period over the range of thresholds shows that convergence rates increase with threshold and performance period:
+
+```{r convergence_chart}
+```
+
+One issue with looking solely at convergence rates is that it does not take into account the size of the dislocation. Clearly it will be relatively easy for an observations with a small disjoint value to dip into the convergence zone compared to observations with larger disjoint values. Looking at the average reversion to the limit value may give a better idea of the convergence effect for different thresholds and performance periods. Here we define reversion as the change from the beginning of the performance period to the nearest convergence threshold only if the series converged, otherwise it is measured as before as the change from the beginning to the end of the performance period (positive values indicate reversion.
+
+```{r avg_reversion_chart}
+```
+
+The average reversion is higher for longer performance periods, as should be expected. Also notice that the average reversion is unchanged as the performance period changes from 25 to 50, suggesting that 25 trading days is long enough to capture the reversion effect in this series.
+
+If we look into the results for a specific threshold, 0.04 in this case, we can see how both the convergence rate and the average reversion towards the limit value increased with the performance period:
+
+```{r convergence_table, results='asis'}
+```
+
+These results show that we tend to see very high convergence rates and reversion effects in this series if the performance period is set long enough.
+
+Looking into a performance period of 25 trading days and still using the threshold of 0.04, we can get a better idea of the distributions of the reversion and profit metrics for both positive and negative disjoint instances:
+
+```{r single_instance, results='asis'}
+```
+
+All 4 charts highlight the tendency of this series to revert back towards it's mean within the performance period (positive values indicate a reversion effect).
+
+Next we repeat the prior analysis for the CLF4.G4.H4.J4 double butterfly series, which doesn't appear to be as well-behaved as the first series:
+
+```{r new_series, results='asis', cache=TRUE, message=FALSE, echo=FALSE}
+```
+
+The mean of the series is `r round(mean(CLF4.G4.H4.J4), 4)` and the standard deviation is `r round(sd(CLF4.G4.H4.J4), 4)`.

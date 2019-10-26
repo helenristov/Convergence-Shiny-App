@@ -1,0 +1,90 @@
+---
+title:  "Convergence Analysis"
+author: "Helen Ristov, Jing Song, and Ryan Ranson"
+date:   "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  ioslides_presentation:
+    widescreen: true
+    smaller: true
+---
+
+```{r preparation, echo=FALSE, warning=FALSE}
+library(ggplot2)
+library(gridExtra)
+library(plyr)
+library(xtable)
+
+load("PreprocessedConvergence.RData")
+
+res.summary <- ddply(res, .(perf.period, threshold), function(x) data.frame( 
+                     obs           = sum(x$obs), 
+                     disjoint.obs  = sum(x$disjoint.obs),
+                     converged.obs = sum(x$converged.obs),
+                     disjoint.pct  = sum(x$disjoint.obs) / sum(x$obs),
+                     converged.pct = sum(x$converged.obs) / sum(x$disjoint.obs),
+                     avg.reversion = weighted.mean(x$avg.reversion, x$disjoint.obs, na.rm = TRUE),
+                     avg.shortfall = weighted.mean(x$avg.shortfall, x$disjoint.obs, na.rm = TRUE)))
+
+df.metrics <- ddply(res, ~Series, summarise, 
+                    obs  = mean(obs), 
+                    mean = mean(mean),
+                    sd   = mean(std.dev), 
+                    min  = mean(min),
+                    max  = mean(max))
+
+df.summary <- data.frame(Mean    = mean(df.metrics$mean),
+                         Std.Dev = mean(df.metrics$sd),
+                         Min     = mean(df.metrics$min),
+                         Max     = mean(df.metrics$max))
+```
+
+## Introduction
+
+The goal of this analysis is to identify points in double fly price series where there is
+a high probability of mean reversion and also to determine an appropriate expected holding 
+period for trades.
+
+Definitions
+
+- Limit: assumed long-term mean of the double fly price series
+- Epsilon: distance above and below the limit which defines the convergence zone
+- Threshold: distance above and below the limit for which we will consider an observation disjoint
+- Performance Period: time period we will look at each disjoint instance to test for convergence
+
+A disjoint observation is said to converge if it reaches the convergence zone at any point
+during the performance period. The reversion metric is the change in the direction of the limit
+of the series until either the series converges or reaches the end of the performance period.
+
+We will look at 60 CL double fly prices from CLF0.G0.H0.J0 to CLZ4.F5.G5.H5. The limit
+parameter is assumed to be 0 and epsilon is set at 0.01.
+
+## Data Summary
+
+```{r, echo=FALSE}
+ggplot(data = res, aes(x = Series, y = mean, ymin = min, ymax = max)) + 
+  geom_crossbar(fill = "lightblue", color = "black") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+  ylab("Range")
+```
+
+## Convergence Metrics {.columns-2}
+
+- Convergence tends to increase with performance period
+- The relationship between convergence rates and threshold is less clear
+- High convergence rates for high threshold and performance periods is in part to due small sample size (there are only `r res.summary$disjoint.obs[res.summary$perf.period == 30 & res.summary$threshold == 0.25]` disjoint observations for performance period = 30 and threshold = 0.25)
+  
+```{r, echo=FALSE, fig.width=14, fig.height=10}
+ggplot(res.summary, aes(x = perf.period, y = threshold)) +
+  geom_tile(aes(fill = avg.reversion), color = "white") +
+  scale_fill_gradient(low = "red", high = "green") + 
+  xlab("Performance Period") +
+  ylab("Threshold") + 
+  labs(fill = "Reversion")
+```
+
+## Reversion Metrics
+
+```{r, echo=FALSE}
+plot(cars)
+```
+
